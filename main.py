@@ -184,7 +184,7 @@ class ArduinoAssistant:
         h, w = frame.shape[:2]
         
         # 1. Status Bar Background
-        cv2.rectangle(frame, (0, 0), (w, 80), BLACK, -1)
+        cv2.rectangle(frame, (0, 0), (w, 110), BLACK, -1)
         
         # 2. Step Info
         if self.current_step_idx < len(STEPS):
@@ -198,21 +198,28 @@ class ArduinoAssistant:
         # 3. State Indicator & Feedback
         status_color = WHITE
         status_text = self.state
+        feedback_text = None  # Persistent feedback shown below status
+        feedback_color = WHITE
+        
+        # Set persistent feedback from last AI response (shown in all states)
+        if self.feedback_data:
+            status = self.feedback_data.get("status", "unknown")
+            feedback = self.feedback_data.get("feedback", "")
+            
+            if status == "correct":
+                feedback_color = GREEN
+                feedback_text = "CORRECT: " + feedback
+            elif status == "partial":
+                feedback_color = YELLOW
+                feedback_text = "PARTIAL: " + feedback
+            else:
+                feedback_color = RED
+                feedback_text = "INCORRECT: " + feedback
         
         if self.state == "FEEDBACK":
             if self.feedback_data:
-                status = self.feedback_data.get("status", "unknown")
-                feedback = self.feedback_data.get("feedback", "")
-                
-                if status == "correct":
-                    status_color = GREEN
-                    status_text = "CORRECT: " + feedback
-                elif status == "partial":
-                    status_color = YELLOW
-                    status_text = "PARTIAL: " + feedback
-                else:
-                    status_color = RED
-                    status_text = "INCORRECT: " + feedback
+                status_text = "Feedback received"
+                status_color = feedback_color
             else:
                 status_text = "Processing..."
                 
@@ -240,6 +247,10 @@ class ArduinoAssistant:
                 status_color = GREEN
 
         cv2.putText(frame, status_text, (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.6, status_color, 2)
+        
+        # Show persistent feedback below status (keeps showing until new feedback arrives)
+        if feedback_text:
+            cv2.putText(frame, feedback_text, (10, 95), cv2.FONT_HERSHEY_SIMPLEX, 0.5, feedback_color, 2)
 
         # 4. Stability Progress Bar (Bottom)
         if self.state in ["MOVING", "STEADY"]:
@@ -324,7 +335,7 @@ class ArduinoAssistant:
                      # Delay or require user acknowledgment? 
                      # Instruction says "Auto-advance when verified"
                      # Let's give it a moment to show the success message, then advance
-                     cv2.putText(frame, "Next step in 3s...", (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.7, GREEN, 2)
+                     cv2.putText(frame, "Next step in 3s...", (10, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.7, GREEN, 2)
                      
                      if not hasattr(self, 'success_start'):
                          self.success_start = time.time()
@@ -337,12 +348,10 @@ class ArduinoAssistant:
                          delattr(self, 'success_start')
                          
                 elif self.feedback_data and self.feedback_data.get("status") in ["incorrect", "partial", "error"]:
-                    # If incorrect, we need to go back to monitoring ONLY if the user moves again?
-                    # Or should we just stay in FEEDBACK until they move?
-                    # Let's say if they move significantly, we retry.
+                    # If incorrect, go back to monitoring when user moves
+                    # Keep feedback_data so it stays visible until new feedback arrives
                     if motion > MOTION_THRESHOLD:
                          self.state = "MOVING"
-                         self.feedback_data = None
                          self.last_motion_time = time.time()
 
             # Draw UI
